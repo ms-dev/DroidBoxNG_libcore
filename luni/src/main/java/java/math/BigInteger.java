@@ -23,6 +23,10 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.Random;
 
+// begin WITH_TAINT_TRACKING
+import dalvik.system.Taint;
+// end WITH_TAINT_TRACKING
+
 /**
  * An immutable arbitrary-precision signed integer.
  *
@@ -52,6 +56,9 @@ public class BigInteger extends Number
 
     /** The magnitude of this in the little-endian representation. */
     transient int[] digits;
+
+    private boolean taintTrack = false;
+    private int taintTag = Taint.TAINT_CLEAR;
 
     /**
      * The length of this in measured in ints. Can be less than
@@ -246,6 +253,14 @@ public class BigInteger extends Number
                 }
             }
         }
+
+	int tag = Taint.getTaintByteArray(magnitude);
+	if (tag != Taint.TAINT_CLEAR)
+	{
+		taintTrack = true;
+		taintTag = taintTag | tag;
+	}
+
         BigInt bigInt = new BigInt();
         bigInt.putBigEndian(magnitude, signum < 0);
         setBigInt(bigInt);
@@ -266,6 +281,14 @@ public class BigInteger extends Number
         if (value.length == 0) {
             throw new NumberFormatException("value.length == 0");
         }
+
+	int tag = Taint.getTaintByteArray(value);
+        if (tag != Taint.TAINT_CLEAR)
+        {
+                taintTrack = true;
+                taintTag = taintTag | tag;
+        }
+
         BigInt bigInt = new BigInt();
         bigInt.putBigEndianTwosComplement(value);
         setBigInt(bigInt);
@@ -345,7 +368,12 @@ public class BigInteger extends Number
      * a byte array.
      */
     public byte[] toByteArray() {
-        return twosComplement();
+	byte[] data = twosComplement();
+
+	if (taintTrack)
+                Taint.addTaintByteArray(data, taintTag);
+
+        return data;
     }
 
     /**
@@ -819,7 +847,12 @@ public class BigInteger extends Number
      */
     @Override
     public String toString() {
-        return getBigInt().decString();
+        String data = getBigInt().decString();
+
+	if (taintTrack)
+		Taint.addTaintString(data, taintTag);
+
+	return data;
     }
 
     /**
@@ -832,12 +865,19 @@ public class BigInteger extends Number
      * @param radix base to be used for the string representation.
      */
     public String toString(int radix) {
+	String data;
+
         if (radix == 10) {
-            return getBigInt().decString();
+            data = getBigInt().decString();
         } else {
             prepareJavaRepresentation();
-            return Conversion.bigInteger2String(this, radix);
+            data = Conversion.bigInteger2String(this, radix);
         }
+
+	if (taintTrack)
+		Taint.addTaintString(data, taintTag);	
+
+	return data;
     }
 
     /**

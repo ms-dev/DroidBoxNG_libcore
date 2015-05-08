@@ -45,6 +45,24 @@ public final class Taint {
     public static final int TAINT_DEVICE_SN     = 0x00002000;
     public static final int TAINT_ACCOUNT       = 0x00004000;
     public static final int TAINT_HISTORY       = 0x00008000;
+
+    /**
+    * Returns Hex representation of a byte buffer
+    * @param buf Byte buffer
+    * @return String with hex representation
+    */
+    public static String toHex(byte[] buf) {
+	StringBuffer hexString = new StringBuffer();
+	for (int i = 0; i < buf.length; i++) {
+		String h = Integer.toHexString(0xFF & buf[i]);
+		while (h.length() < 2)
+			h = "0" + h;
+
+		hexString.append(h);
+	}
+
+	return  hexString.toString();
+    }
     
     // how many bytes of tainted network output data to print to log?
     public static final int dataBytesToLog = 100;
@@ -480,7 +498,8 @@ public final class Taint {
      * @param fd
      *	    the file descriptor
      */
-    native public static void logPathFromFd(int fd);
+    //native public static void logPathFromFd(int fd);
+    native public static int logPathFromFd(int fd, int id);
 
     /**
      * Logging utility to obtain the peer IP addr for a file descriptor

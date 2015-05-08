@@ -51,6 +51,15 @@ public class PublicKeyImpl implements PublicKey {
         return "X.509";
     }
 
+    /**
+     * Hack to get key from Cipher class
+     * @hide
+     */
+    public byte[] getKey() {
+        byte[] result = new byte[encoding.length];
+        System.arraycopy(encoding, 0, result, 0, encoding.length);
+        return result;
+    }
 
     public byte[] getEncoded() {
         byte[] result = new byte[encoding.length];

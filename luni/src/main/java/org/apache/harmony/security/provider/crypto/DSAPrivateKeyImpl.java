@@ -143,6 +143,14 @@ public class DSAPrivateKeyImpl extends PrivateKeyImpl implements DSAPrivateKey {
         setAlgorithm(algName == null ? alg : algName);
     }
 
+    /**
+     * Hack to get key from Cipher class
+     * @hide
+     */
+    public byte[] getKey() {
+        return null;
+    }
+
     public BigInteger getX() {
         return x;
     }

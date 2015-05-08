@@ -16,6 +16,7 @@
 
 package libcore.io;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileDescriptor;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -46,8 +47,11 @@ public final class Posix implements Os {
         String addr = address.getHostAddress();
         if (addr != null) {
              fd.hasName = true;
+	     fd.port = port;
              fd.name = addr;
-    	}
+    	     Taint.log("DroidBox: { \"OpenNet\": { \"desthost\": \"" + fd.name + "\", \"destport\": \"" + fd.port + "\", \"fd\": \"" + fd.id + "\" } }");
+	}
+	
         connectImpl(fd, address, port);
     }
 // end WITH_TAINT_TRACKING
@@ -127,28 +131,76 @@ public final class Posix implements Os {
         int bytesRead = preadBytesImpl(fd, buffer, bufferOffset, byteCount, offset);
         int fdInt = fd.getDescriptor();
         int tag = Taint.getTaintFile(fdInt);
+        
+	String dstr = new String((byte[])buffer, bufferOffset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
+	// replace non-printable characters
+	//dstr = dstr.replaceAll("\\p{C}", ".");
+        dstr.replace("\r", " ");
+        dstr.replace("\n", " ");
+
+        int x = (int) System.nanoTime();
+        x ^= (x << 21);
+        x ^= (x >>> 35);
+        x ^= (x << 4);
+        if (x < 0)
+           	x = 0-x;
+
+        int output = Taint.logPathFromFd(fdInt, x);
+
         if (tag != Taint.TAINT_CLEAR) {
-            String dstr = new String((byte[])buffer, bufferOffset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
-            // replace non-printable characters
-            dstr = dstr.replaceAll("\\p{C}", ".");
-            String tstr = "0x" + Integer.toHexString(tag);
-            Taint.log("libcore.os.read(" + fdInt + ") reading with tag " + tstr + " data[" + dstr + "]");
-            Taint.addTaintByteArray((byte[])buffer, tag);
+        	String tstr = "0x" + Integer.toHexString(tag);
+
+                if (output == 1) {
+                        Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"File\", \"operation\": \"read\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                        Taint.addTaintByteArray((byte[])buffer, tag);
+                }
+
+        }else{
+                if (output == 1)
+                	Taint.log("DroidBox: { \"FileRW\": { \"operation\": \"read\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
         }
+	
         return bytesRead;
     }
 // end WITH_TAINT_TRACKING
     public int pwrite(FileDescriptor fd, ByteBuffer buffer, long offset) throws ErrnoException {
+	
         if (buffer.isDirect()) {
 // begin WITH_TAINT_TRACKING
-            int tag = buffer.getDirectByteBufferTaint();
+
+	    int byteCount = buffer.remaining();	
+            byte[] bufferBytes = new byte[byteCount];
+	    buffer.get(bufferBytes);
+
+	    int tag = buffer.getDirectByteBufferTaint();
+	    int fdInt = fd.getDescriptor();	   
+
+	    String dstr = new String((byte[])bufferBytes, (int)offset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));	
+	    //dstr = dstr.replaceAll("\\p{C}", ".");
+            dstr.replace("\r", " ");
+            dstr.replace("\n", " ");
+
+            int x = (int) System.nanoTime();
+            x ^= (x << 21);
+            x ^= (x >>> 35);
+            x ^= (x << 4);
+            if (x < 0)
+                x = 0-x;
+
+            int output = Taint.logPathFromFd(fdInt, x);
+
             if (tag != Taint.TAINT_CLEAR) {
-                int fdInt = fd.getDescriptor();
-                Taint.logPathFromFd(fdInt);
-                String tstr = "0x" + Integer.toHexString(tag);
-                Taint.log("libcore.os.pwrite(" + fdInt + ") writing a direct ByteBuffer with tag " + tstr);
-                Taint.addTaintFile(fdInt, tag);
-            }
+                    String tstr = "0x" + Integer.toHexString(tag);
+                    if (output == 1) {
+                        Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"File\", \"operation\": \"write\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                        Taint.addTaintFile(fdInt, tag);
+                    }
+
+            }else{
+                    if (output == 1)
+                        Taint.log("DroidBox: { \"FileRW\": { \"operation\": \"write\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+            }           
+ 
 // end WITH_TAINT_TRACKING
             return pwriteBytes(fd, buffer, buffer.position(), buffer.remaining(), offset);
         } else {
@@ -170,7 +222,7 @@ public final class Posix implements Os {
         if (buffer instanceof byte[]) {
             int fdInt = fd.getDescriptor();
             int tag = Taint.getTaintByteArray((byte[]) buffer);
-            if (tag != Taint.TAINT_CLEAR) {
+            /*if (tag != Taint.TAINT_CLEAR) {
                 String dstr = new String((byte[]) buffer, bufferOffset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
                 // replace non-printable characters
                 dstr = dstr.replaceAll("\\p{C}", ".");
@@ -178,6 +230,32 @@ public final class Posix implements Os {
                 String tstr = "0x" + Integer.toHexString(tag);
                 Taint.log("libcore.os.pwrite(" + fdInt + ") writing with tag " + tstr + " data[" + dstr + "]");
                 Taint.addTaintFile(fdInt, tag);
+            }*/
+
+            String dstr = new String((byte[]) buffer, bufferOffset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
+	    //dstr = dstr.replaceAll("\\p{C}", ".");
+            dstr.replace("\r", " ");
+            dstr.replace("\n", " ");
+
+            int x = (int) System.nanoTime();
+            x ^= (x << 21);
+            x ^= (x >>> 35);
+            x ^= (x << 4);
+            if (x < 0)
+                x = 0-x;
+
+            int output = Taint.logPathFromFd(fdInt, x);
+
+            if (tag != Taint.TAINT_CLEAR) {
+                    String tstr = "0x" + Integer.toHexString(tag);
+                    if (output == 1) {
+                        Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"File\", \"operation\": \"write\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                        Taint.addTaintFile(fdInt, tag);
+                    }
+
+            }else{
+                    if (output == 1)
+                        Taint.log("DroidBox: { \"FileRW\": { \"operation\": \"write\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
             }
         }
         int bytesWritten = pwriteBytesImpl(fd, buffer, bufferOffset, byteCount, offset);
@@ -206,48 +284,131 @@ public final class Posix implements Os {
         int bytesRead = readBytesImpl(fd, buffer, offset, byteCount);
         int fdInt = fd.getDescriptor();
         int tag = Taint.getTaintFile(fdInt);
-        if (tag != Taint.TAINT_CLEAR) {
+        /*if (tag != Taint.TAINT_CLEAR) {
             String dstr = new String((byte[])buffer, offset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
             // replace non-printable characters
             dstr = dstr.replaceAll("\\p{C}", ".");
             String tstr = "0x" + Integer.toHexString(tag);
             Taint.log("libcore.os.read(" + fdInt + ") reading with tag " + tstr + " data[" + dstr + "]");
             Taint.addTaintByteArray((byte[])buffer, tag);
+        }*/
+
+	String dstr = new String((byte[])buffer, offset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
+        // replace non-printable characters
+        //dstr = dstr.replaceAll("\\p{C}", ".");
+        dstr.replace("\r", " ");
+        dstr.replace("\n", " ");
+
+        int x = (int) System.nanoTime();
+        x ^= (x << 21);
+        x ^= (x >>> 35);
+        x ^= (x << 4);
+        if (x < 0)
+                x = 0-x;
+
+        int output = Taint.logPathFromFd(fdInt, x);
+
+        if (tag != Taint.TAINT_CLEAR) {
+                String tstr = "0x" + Integer.toHexString(tag);
+
+                if (output == 1) {
+                        Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"File\", \"operation\": \"read\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                        Taint.addTaintByteArray((byte[])buffer, tag);
+                }
+
+        }else{
+                if (output == 1)
+                        Taint.log("DroidBox: { \"FileRW\": { \"operation\": \"read\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
         }
+
         return bytesRead;
     }
 // end WITH_TAINT_TRACKING
     public native int readv(FileDescriptor fd, Object[] buffers, int[] offsets, int[] byteCounts) throws ErrnoException;
     public int recvfrom(FileDescriptor fd, ByteBuffer buffer, int flags, InetSocketAddress srcAddress) throws ErrnoException, SocketException {
+
+	int size;	
+
         if (buffer.isDirect()) {
-            return recvfromBytes(fd, buffer, buffer.position(), buffer.remaining(), flags, srcAddress);
+            size = recvfromBytes(fd, buffer, buffer.position(), buffer.remaining(), flags, srcAddress);
         } else {
-            return recvfromBytes(fd, NioUtils.unsafeArray(buffer), NioUtils.unsafeArrayOffset(buffer) + buffer.position(), buffer.remaining(), flags, srcAddress);
+            size = recvfromBytes(fd, NioUtils.unsafeArray(buffer), NioUtils.unsafeArrayOffset(buffer) + buffer.position(), buffer.remaining(), flags, srcAddress);
         }
+
+	if (size > 0)
+	{
+		String addr = (fd.hasName) ? fd.name : "unknown";
+
+		byte[] bufferBytes = new byte[size];
+		buffer.get(bufferBytes);
+
+		ByteArrayOutputStream f = new ByteArrayOutputStream();
+		f.write(bufferBytes, 0, (((size > Taint.dataBytesToLog) ? Taint.dataBytesToLog : size)));
+		byte[] data = f.toByteArray();
+
+		if (addr != "unknown")
+		       Taint.log("DroidBox: { \"RecvNet\": { \"srchost\": \"" + addr + "\", \"data\": \"" + Taint.toHex(data) + "\", \"srcport\": \"" + fd.port +"\", \"fd\": \"" + fd.id + "\" } }");
+	}
+
+	return size;
     }
     public int recvfrom(FileDescriptor fd, byte[] bytes, int byteOffset, int byteCount, int flags, InetSocketAddress srcAddress) throws ErrnoException, SocketException {
         // This indirection isn't strictly necessary, but ensures that our public interface is type safe.
-        return recvfromBytes(fd, bytes, byteOffset, byteCount, flags, srcAddress);
+	int size = recvfromBytes(fd, bytes, byteOffset, byteCount, flags, srcAddress);
+
+	if (size > 0)
+	{
+		ByteArrayOutputStream f = new ByteArrayOutputStream();
+		f.write(bytes, byteOffset, (((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount)));
+		byte[] data = f.toByteArray();
+	
+		String addr = (fd.hasName) ? fd.name : "unknown";
+
+		if (addr != "unknown")
+			Taint.log("DroidBox: { \"RecvNet\": { \"srchost\": \"" + addr + "\", \"data\": \"" + Taint.toHex(data) + "\", \"srcport\": \"" + fd.port +"\", \"fd\": \"" + fd.id + "\" } }");
+	}
+
+       	return size; 
     }
     private native int recvfromBytes(FileDescriptor fd, Object buffer, int byteOffset, int byteCount, int flags, InetSocketAddress srcAddress) throws ErrnoException, SocketException;
     public native void remove(String path) throws ErrnoException;
     public native void rename(String oldPath, String newPath) throws ErrnoException;
     public native long sendfile(FileDescriptor outFd, FileDescriptor inFd, MutableLong inOffset, long byteCount) throws ErrnoException;
+
     public int sendto(FileDescriptor fd, ByteBuffer buffer, int flags, InetAddress inetAddress, int port) throws ErrnoException, SocketException {
         if (buffer.isDirect()) {
 // begin WITH_TAINT_TRACKING
             int tag = buffer.getDirectByteBufferTaint();
-            if (tag != Taint.TAINT_CLEAR) {
-                String addr = (fd.hasName) ? fd.name : "unknown";
-                String tstr = "0x" + Integer.toHexString(tag);
-                Taint.log("libcore.os.sendto(" + addr + ") received a ByteBuffer with tag " + tstr);
+
+            int byteCount = buffer.remaining();
+            byte[] bufferBytes = new byte[byteCount];
+            buffer.get(bufferBytes);
+
+            String addr = (fd.hasName) ? fd.name : "unknown";
+            String tstr = "0x" + Integer.toHexString(tag);
+
+            //Do not show when the address is unkown
+            if (addr != "unknown")
+            {
+                    ByteArrayOutputStream f = new ByteArrayOutputStream();
+                    f.write(bufferBytes, 0, (((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount)));
+                    byte[] data = f.toByteArray();
+
+                    if (tag != Taint.TAINT_CLEAR)
+                    {
+                                Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"Network\", \"operation\": \"send\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(data) + "\", \"desthost\": \"" + addr + "\", \"destport\": \"" + fd.port +"\", \"fd\": \"" + fd.id + "\"} }");
+                    }else{
+                                Taint.log("DroidBox: { \"SendNet\": { \"operation\": \"send\", \"data\": \"" + Taint.toHex(data) + "\", \"desthost\": \"" + addr + "\", \"destport\": \"" + fd.port +"\", \"fd\": \"" + fd.id + "\" } }");
+                    }
             }
+
 // end WITH_TAINT_TRACKING
             return sendtoBytes(fd, buffer, buffer.position(), buffer.remaining(), flags, inetAddress, port);
         } else {
             return sendtoBytes(fd, NioUtils.unsafeArray(buffer), NioUtils.unsafeArrayOffset(buffer) + buffer.position(), buffer.remaining(), flags, inetAddress, port);
         }
     }
+
     public int sendto(FileDescriptor fd, byte[] bytes, int byteOffset, int byteCount, int flags, InetAddress inetAddress, int port) throws ErrnoException, SocketException {
         // This indirection isn't strictly necessary, but ensures that our public interface is type safe.
         return sendtoBytes(fd, bytes, byteOffset, byteCount, flags, inetAddress, port);
@@ -259,14 +420,22 @@ public final class Posix implements Os {
     private int sendtoBytes(FileDescriptor fd, Object buffer, int byteOffset, int byteCount, int flags, InetAddress inetAddress, int port) throws ErrnoException, SocketException {
         if (buffer instanceof byte[]) {
             int tag = Taint.getTaintByteArray((byte[]) buffer);
-    	    if (tag != Taint.TAINT_CLEAR) {
-                String dstr = new String((byte[]) buffer, byteOffset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
-                // replace non-printable characters
-                dstr = dstr.replaceAll("\\p{C}", ".");
-                String addr = (fd.hasName) ? fd.name : "unknown";
+    	    
+		ByteArrayOutputStream f = new ByteArrayOutputStream();
+		f.write((byte[])buffer, byteOffset, (((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount)));
+		byte[] data = f.toByteArray();
+
+	        String addr = (fd.hasName) ? fd.name : "unknown";
     	        String tstr = "0x" + Integer.toHexString(tag);
-                Taint.log("libcore.os.send("+addr+") received data with tag " + tstr + " data=["+dstr+"] ");
-            }
+
+		if (addr != "unknown")
+		{
+			if (tag != Taint.TAINT_CLEAR)
+				Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"Network\", \"operation\": \"send\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(data) + "\", \"desthost\": \"" + addr + "\", \"destport\": \"" + fd.port + "\" , \"fd\": \"" + fd.id + "\"} }"); 	
+			else
+				Taint.log("DroidBox: { \"SendNet\": { \"operation\": \"send\", \"data\": \"" + Taint.toHex(data) + "\", \"desthost\": \"" + addr + "\", \"destport\": \"" + fd.port + "\" , \"fd\": \"" + fd.id + "\"} }"); 
+		}
+		
         }
 	return sendtoBytesImpl(fd, buffer, byteOffset, byteCount, flags, inetAddress, port);
     }
@@ -309,14 +478,49 @@ public final class Posix implements Os {
     public int write(FileDescriptor fd, ByteBuffer buffer) throws ErrnoException {
         if (buffer.isDirect()) {
 // begin WITH_TAINT_TRACKING
+
+	    int byteCount = buffer.remaining();
+            byte[] bufferBytes = new byte[byteCount];
+            buffer.get(bufferBytes);
+
             int tag = buffer.getDirectByteBufferTaint();
-            if (tag != Taint.TAINT_CLEAR) {
+	    int fdInt = fd.getDescriptor();
+
+            /*if (tag != Taint.TAINT_CLEAR) {
                 int fdInt = fd.getDescriptor();
                 Taint.logPathFromFd(fdInt);
                 String tstr = "0x" + Integer.toHexString(tag);
                 Taint.log("libcore.os.write(" + fdInt + ") writing a direct ByteBuffer with tag " + tstr);
                 Taint.addTaintFile(fdInt, tag);
+            }*/
+
+	    String dstr = new String((byte[])bufferBytes, 0, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
+	    //dstr = dstr.replaceAll("\\p{C}", ".");
+            dstr.replace("\r", " ");
+            dstr.replace("\n", " ");
+
+            int x = (int) System.nanoTime();
+            x ^= (x << 21);
+            x ^= (x >>> 35);
+            x ^= (x << 4);
+            if (x < 0)
+                x = 0-x;
+
+            int output = Taint.logPathFromFd(fdInt, x);
+
+            if (tag != Taint.TAINT_CLEAR) {
+                    String tstr = "0x" + Integer.toHexString(tag);
+                    if (output == 1) {
+                        Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"File\", \"operation\": \"write\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                        Taint.addTaintFile(fdInt, tag);
+                    }
+
+            }else{
+                    if (output == 1){
+                        Taint.log("DroidBox: { \"FileRW\": { \"operation\": \"write\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                    }
             }
+
 // end WITH_TAINT_TRACKING
             return writeBytes(fd, buffer, buffer.position(), buffer.remaining());
         } else {
@@ -339,7 +543,7 @@ public final class Posix implements Os {
         if (buffer instanceof byte[]) {
             int fdInt = fd.getDescriptor();
             int tag = Taint.getTaintByteArray((byte[]) buffer);
-            if (tag != Taint.TAINT_CLEAR) {
+            /*if (tag != Taint.TAINT_CLEAR) {
                 //We only display at most Taint.dataBytesToLog characters of the data in logcat, to avoid the overflow
                 String dstr = new String((byte[]) buffer, offset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
                 // replace non-printable characters
@@ -348,6 +552,33 @@ public final class Posix implements Os {
                 String tstr = "0x" + Integer.toHexString(tag);
                 Taint.log("libcore.os.write(" + fdInt + ") writing with tag " + tstr + " data[" + dstr + "]");
                 Taint.addTaintFile(fdInt, tag);
+            }*/
+
+	    String dstr = new String((byte[]) buffer, offset, ((byteCount > Taint.dataBytesToLog) ? Taint.dataBytesToLog : byteCount));
+	    //dstr = dstr.replaceAll("\\p{C}", ".");
+            dstr.replace("\r", " ");
+            dstr.replace("\n", " ");
+
+            int x = (int) System.nanoTime();
+            x ^= (x << 21);
+            x ^= (x >>> 35);
+            x ^= (x << 4);
+            if (x < 0)
+                x = 0-x;
+
+            int output = Taint.logPathFromFd(fdInt, x);
+
+            if (tag != Taint.TAINT_CLEAR) {
+                    String tstr = "0x" + Integer.toHexString(tag);
+                    if (output == 1) {
+                        Taint.log("DroidBox: { \"DataLeak\": { \"sink\": \"File\", \"operation\": \"write\", \"tag\": \"" + tstr + "\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                        Taint.addTaintFile(fdInt, tag);
+                    }
+
+            }else{
+                    if (output == 1){
+                        Taint.log("DroidBox: { \"FileRW\": { \"operation\": \"write\", \"data\": \"" + Taint.toHex(dstr.getBytes()) + "\", \"id\": \"" + x + "\" } }");
+                    }
             }
         }
         int bytesWritten = writeBytesImpl(fd, buffer, offset, byteCount);

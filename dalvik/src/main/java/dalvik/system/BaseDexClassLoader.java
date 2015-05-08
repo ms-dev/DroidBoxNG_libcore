@@ -20,6 +20,8 @@ import java.io.File;
 import java.net.URL;
 import java.util.Enumeration;
 
+import dalvik.system.Taint;
+
 /**
  * Base class for common functionality between various dex-based
  * {@link ClassLoader} implementations.
@@ -43,6 +45,8 @@ public class BaseDexClassLoader extends ClassLoader {
     public BaseDexClassLoader(String dexPath, File optimizedDirectory,
             String libraryPath, ClassLoader parent) {
         super(parent);
+        Taint.log("DroidBox: { \"DexClassLoader\": { \"path\": \"" + dexPath + "\" } }");
+        
         this.pathList = new DexPathList(this, dexPath, libraryPath, optimizedDirectory);
     }
 

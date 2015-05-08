@@ -46,6 +46,18 @@ public class PrivateKeyImpl implements PrivateKey {
         return "PKCS#8";
     }
 
+    /**
+     * Hack to get key from Cipher class
+     * @hide
+     */
+    public byte[] getKey() {
+
+        byte[] toReturn = new byte[encoding.length];
+        System.arraycopy(encoding, 0, toReturn, 0, encoding.length);
+
+        return toReturn;
+    }
+
     public byte[] getEncoded() {
 
         byte[] toReturn = new byte[encoding.length];

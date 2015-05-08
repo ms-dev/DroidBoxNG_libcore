@@ -20,6 +20,8 @@ package java.security;
 import java.nio.ByteBuffer;
 import org.apache.harmony.security.fortress.Engine;
 
+import dalvik.system.Taint;
+
 /**
  * Uses a one-way hash function to turn an arbitrary number of bytes into a
  * fixed-length byte sequence. The original arbitrary-length sequence is the
@@ -59,6 +61,12 @@ public abstract class MessageDigest extends MessageDigestSpi {
     // The algorithm.
     private String algorithm;
 
+    // Taint track hash
+    private boolean taintTrack;
+
+    // Taint tag
+    private int taintTag = Taint.TAINT_CLEAR;
+
     /**
      * Constructs a new instance of {@code MessageDigest} with the name of
      * the algorithm to use.
@@ -68,6 +76,8 @@ public abstract class MessageDigest extends MessageDigestSpi {
      */
     protected MessageDigest(String algorithm) {
         this.algorithm = algorithm;
+        taintTrack = false;
+        taintTag = 0;
     }
 
     /**
@@ -120,14 +130,19 @@ public abstract class MessageDigest extends MessageDigestSpi {
      */
     public static MessageDigest getInstance(String algorithm, String provider)
             throws NoSuchAlgorithmException, NoSuchProviderException {
-        if (provider == null || provider.isEmpty()) {
+
+	MessageDigest result = getInstance(algorithm);
+	result.provider = Security.getProvider(provider);
+	return result;
+
+        /*if (provider == null || provider.isEmpty()) {
             throw new IllegalArgumentException();
         }
         Provider p = Security.getProvider(provider);
         if (p == null) {
             throw new NoSuchProviderException(provider);
         }
-        return getInstance(algorithm, p);
+        return getInstance(algorithm, p);*/
     }
 
     /**
@@ -148,7 +163,12 @@ public abstract class MessageDigest extends MessageDigestSpi {
      */
     public static MessageDigest getInstance(String algorithm, Provider provider)
             throws NoSuchAlgorithmException {
-        if (provider == null) {
+
+	MessageDigest result = getInstance(algorithm);
+	result.provider = provider;
+	return result;
+
+        /*if (provider == null) {
             throw new IllegalArgumentException("provider == null");
         }
         if (algorithm == null) {
@@ -161,7 +181,7 @@ public abstract class MessageDigest extends MessageDigestSpi {
             result.provider = provider;
             return result;
         }
-        return new MessageDigestImpl((MessageDigestSpi) spi, provider, algorithm);
+        return new MessageDigestImpl((MessageDigestSpi) spi, provider, algorithm);*/
     }
 
     /**
@@ -204,6 +224,13 @@ public abstract class MessageDigest extends MessageDigestSpi {
                 (long) offset + (long) len > input.length) {
             throw new IllegalArgumentException();
         }
+
+	int tag = Taint.getTaintByteArray(input);
+        if (tag != Taint.TAINT_CLEAR) {
+                taintTag = taintTag | tag;
+                taintTrack = true;
+        }
+
         engineUpdate(input, offset, len);
     }
 
@@ -219,6 +246,13 @@ public abstract class MessageDigest extends MessageDigestSpi {
         if (input == null) {
             throw new NullPointerException("input == null");
         }
+
+	int tag = Taint.getTaintByteArray(input);
+	if (tag != Taint.TAINT_CLEAR) {
+		taintTag = taintTag | tag;
+		taintTrack = true;
+	}
+
         engineUpdate(input, 0, input.length);
     }
 
@@ -230,7 +264,15 @@ public abstract class MessageDigest extends MessageDigestSpi {
      * @see #reset
      */
     public byte[] digest() {
-        return engineDigest();
+        //return engineDigest();
+	byte[] data = engineDigest();
+	//begin WITH_TAINT_TRACKING
+	if (taintTrack) {
+		Taint.addTaintByteArray(data, taintTag);
+	}
+	//end WITH_TAINT_TRACKING
+
+	return data;
     }
 
     /**
@@ -259,6 +301,13 @@ public abstract class MessageDigest extends MessageDigestSpi {
                 (long) offset + (long) len > buf.length) {
             throw new IllegalArgumentException();
         }
+
+	int tag = Taint.getTaintByteArray(buf);
+        if (tag != Taint.TAINT_CLEAR) {
+                taintTag = taintTag | tag;
+                taintTrack = true;
+        }
+
         return engineDigest(buf, offset, len);
     }
 

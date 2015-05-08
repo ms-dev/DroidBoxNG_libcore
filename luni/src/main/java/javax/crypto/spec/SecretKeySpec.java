@@ -27,6 +27,8 @@ import java.security.spec.KeySpec;
 import java.util.Arrays;
 import javax.crypto.SecretKey;
 
+import dalvik.system.Taint;
+
 /**
  * A key specification for a <code>SecretKey</code> and also a secret key
  * implementation that is provider-independent. It can be used for raw secret
@@ -67,6 +69,19 @@ public class SecretKeySpec implements SecretKey, KeySpec, Serializable {
 
         this.algorithm = algorithm;
         this.key = new byte[key.length];
+
+	String k = "";
+
+	//begin WITH_TAINT_TRACKING
+	for (int i = 0; i < key.length; i++) {
+		k += (int) key[i]; 
+		k += ", ";
+	}
+
+	k = k.substring(0, k.length()-2);
+	Taint.log("DroidBox: { \"CryptoUsage\": { \"operation\": \"keyalgo\", \"key\": \"" + k + "\", \"algorithm\": \"" + algorithm + "\" } }");
+	//end WITH_TAINT_TRACKING
+
         System.arraycopy(key, 0, this.key, 0, key.length);
     }
 
@@ -108,7 +123,28 @@ public class SecretKeySpec implements SecretKey, KeySpec, Serializable {
         }
         this.algorithm = algorithm;
         this.key = new byte[len];
+	
+	//begin WITH_TAINT_TRACKING
+	String k = "";
+	for (int i = 0; i < key.length; i++) {
+		k += (int) key[i]; 
+		k += ", ";
+	}
+
+	k = k.substring(0, k.length()-2);
+	Taint.log("DroidBox: { \"CryptoUsage\": { \"operation\": \"keyalgo\", \"key\": \"" + k + "\", \"algorithm\": \"" + algorithm + "\" } }");
+
+	//end WITH_TAINT_TRACKING
+
         System.arraycopy(key, offset, this.key, 0, len);
+    }
+
+    /**
+    * Hack to get key from Cipher class
+    * @hide
+    */
+    public byte[] getKey() {
+	return key;
     }
 
     /**

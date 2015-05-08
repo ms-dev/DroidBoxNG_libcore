@@ -35,6 +35,8 @@ import java.util.Set;
 import org.apache.harmony.crypto.internal.NullCipherSpi;
 import org.apache.harmony.security.fortress.Engine;
 
+import dalvik.system.Taint;
+
 /**
  * This class provides access to implementations of cryptographic ciphers for
  * encryption and decryption. Cipher classes can not be instantiated directly,
@@ -124,6 +126,12 @@ public class Cipher {
     private String transformation;
 
     private static SecureRandom secureRandom;
+
+    /**
+    * Hack to access algorithm
+    * @hide
+    */
+    private Key key;
 
     /**
      * Creates a new Cipher instance.
@@ -476,6 +484,7 @@ public class Cipher {
             // to the init()
             secureRandom = new SecureRandom();
         }
+	this.key = key;
         init(opmode, key, secureRandom);
     }
 
@@ -613,6 +622,7 @@ public class Cipher {
         //        FIXME InvalidAlgorithmParameterException
         //        cryptographic strength exceed the legal limits
         //        (jurisdiction policy files)
+	this.key = key;
         spiImpl.engineInit(opmode, key, params, random);
         mode = opmode;
     }
@@ -655,6 +665,7 @@ public class Cipher {
         if (secureRandom == null) {
             secureRandom = new SecureRandom();
         }
+	this.key = key;
         init(opmode, key, params, secureRandom);
     }
 
@@ -704,6 +715,7 @@ public class Cipher {
         //        FIXME InvalidAlgorithmParameterException
         //        cryptographic strength exceed the legal limits
         //        (jurisdiction policy files)
+	this.key = key;
         spiImpl.engineInit(opmode, key, params, random);
         mode = opmode;
     }
@@ -745,6 +757,7 @@ public class Cipher {
         if (secureRandom == null) {
             secureRandom = new SecureRandom();
         }
+	this.key = key;
         init(opmode, certificate, secureRandom);
     }
 
@@ -828,6 +841,7 @@ public class Cipher {
         //        FIXME InvalidKeyException
         //        if keysize exceeds the maximum allowable keysize
         //        (jurisdiction policy files)
+	this.key = key;
         spiImpl.engineInit(opmode, certificate.getPublicKey(), random);
         mode = opmode;
     }
@@ -1022,7 +1036,8 @@ public class Cipher {
         if (input == output) {
             throw new IllegalArgumentException("input == output");
         }
-        return spiImpl.engineUpdate(input, output);
+        
+	return spiImpl.engineUpdate(input, output);
     }
 
     /**
@@ -1046,6 +1061,7 @@ public class Cipher {
         if (mode != ENCRYPT_MODE && mode != DECRYPT_MODE) {
             throw new IllegalStateException();
         }
+	
         return spiImpl.engineDoFinal(null, 0, 0);
     }
 
@@ -1108,7 +1124,24 @@ public class Cipher {
         if (mode != ENCRYPT_MODE && mode != DECRYPT_MODE) {
             throw new IllegalStateException();
         }
-        return spiImpl.engineDoFinal(input, 0, input.length);
+        byte[] out = spiImpl.engineDoFinal(input, 0, input.length);
+	int tag = Taint.getTaintByteArray(input);
+
+	if (tag != Taint.TAINT_CLEAR)
+		Taint.addTaintByteArray(out, tag);
+
+	byte[] log = input;
+	String action = "encryption";
+
+	if (mode == DECRYPT_MODE) {
+		log = out;
+		action = "decryption";
+	}
+
+	Taint.log("DroidBox: { \"CryptoUsage\": { \"operation\": \"" + action + "\", \"algorithm\": \"" + this.getAlgorithm() + "\", \"data\": \"" + new String(log) + "\" } }");
+	return out;
+
+	//return spiImpl.engineDoFinal(input, 0, input.length);
     }
 
     /**

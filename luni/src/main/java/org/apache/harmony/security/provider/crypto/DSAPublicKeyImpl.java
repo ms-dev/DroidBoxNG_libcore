@@ -148,6 +148,14 @@ public class DSAPublicKeyImpl extends PublicKeyImpl implements DSAPublicKey {
     }
 
     /**
+     * Hack to get key from Cipher class
+     * @hide
+     */
+    public byte[] getKey() {
+        return null;
+    }    
+
+    /**
      * @return
      *      a value of a public key (y).
      */

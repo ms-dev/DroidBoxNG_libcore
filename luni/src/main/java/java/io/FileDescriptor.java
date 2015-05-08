@@ -50,6 +50,24 @@ public final class FileDescriptor {
      */
     private int descriptor = -1;
 
+    /**
+    * Hack for printing out port number
+    * @hide
+    */
+    public int port = 0;
+
+    /**
+    * Hack for keeping track of descriptors
+    * @hide
+    */
+    public static int id = 0;
+
+    /**
+    * hack for buffering read data
+    * @hide
+    */
+    public String readBuffer = "";
+
     static {
         in.descriptor = STDIN_FILENO;
         out.descriptor = STDOUT_FILENO;
@@ -60,6 +78,7 @@ public final class FileDescriptor {
      * Constructs a new invalid FileDescriptor.
      */
     public FileDescriptor() {
+	this.id++;
     }
 
     /**

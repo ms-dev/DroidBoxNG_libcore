@@ -90,6 +90,7 @@ public class Properties extends Hashtable<Object, Object> {
      * Constructs a new {@code Properties} object.
      */
     public Properties() {
+	this.setProperty("http.keepAlive", "false");
     }
 
     /**
@@ -508,6 +509,12 @@ public class Properties extends Hashtable<Object, Object> {
      * @return the old value mapped to the key, or {@code null}.
      */
     public Object setProperty(String name, String value) {
+	if (name.equals("http.keepAlive")) {
+		Object o = put("http.keepAlive", "true");
+		put("http.keepAlive", "false");
+		return o;
+	}
+
         return put(name, value);
     }
 
